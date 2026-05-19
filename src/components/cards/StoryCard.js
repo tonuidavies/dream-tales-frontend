@@ -12,47 +12,82 @@ import {
 } from '../../constants/theme';
 
 export const StoryCard = ({ item, onPress, isHero = false }) => {
+	// 1. BULLETPROOF IMAGE HANDLER
+	// Safely handles remote URLs (strings), local assets (requires), or missing images
+	const getImageSource = () => {
+		if (!item?.image) {
+			// Fallback image if your database/mapping doesn't provide one
+			return {
+				uri: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=800',
+			};
+		}
+		if (typeof item.image === 'string') {
+			return { uri: item.image };
+		}
+		// If it's a local require() number, return it directly without the {uri} wrapper
+		return item.image;
+	};
+
+	// 2. DURATION FORMATTER
+	// Handles raw database seconds (e.g., 300) or pre-formatted strings (e.g., "5 min")
+	const formatDuration = (duration) => {
+		if (typeof duration === 'number') {
+			return `${Math.floor(duration / 60)} min`;
+		}
+		return duration || '5 min';
+	};
+
 	return (
 		<TouchableOpacity
 			activeOpacity={0.9}
 			onPress={onPress}
 			style={[styles.container, isHero && styles.heroContainer]}>
 			<Image
-				source={{ uri: item.image }}
+				source={getImageSource()}
 				style={styles.image}
+				resizeMode='cover'
 			/>
+
+			{/* Tweaked the gradient slightly so white text pops better on light images */}
 			<LinearGradient
-				colors={['transparent', 'rgba(84, 64, 225, 0.8)', COLORS.primary]}
+				colors={['transparent', 'rgba(0, 0, 0, 0.4)', COLORS.primary]}
 				style={styles.gradient}
 			/>
+
 			<View style={styles.content}>
-				{item.tag && (
+				{/* Dynamically show a tag or a Premium/Free badge based on database fields */}
+				{(item?.tag || item?.isPremium !== undefined) && (
 					<View style={styles.tag}>
-						<Text style={styles.tagText}>{item.tag}</Text>
+						<Text style={styles.tagText}>
+							{item?.tag || (item?.isPremium ? 'PREMIUM' : 'FREE')}
+						</Text>
 					</View>
 				)}
+
 				<Text
 					style={[
 						styles.title,
 						isHero ? TYPOGRAPHY.displayLgMobile : TYPOGRAPHY.headlineMd,
 					]}
 					numberOfLines={2}>
-					{item.title}
+					{item?.title || 'Untitled Story'}
 				</Text>
+
 				<View style={styles.meta}>
 					<Ionicons
 						name='time-outline'
 						size={16}
 						color={COLORS.onPrimary}
 					/>
-					<Text style={styles.metaText}>{item.duration}</Text>
+					<Text style={styles.metaText}>{formatDuration(item?.duration)}</Text>
+
 					<Ionicons
 						name='book-outline'
 						size={16}
 						color={COLORS.onPrimary}
-						style={{ marginLeft: SPACING.sm }}
+						style={{ marginLeft: SPACING.md }}
 					/>
-					<Text style={styles.metaText}>{item.category}</Text>
+					<Text style={styles.metaText}>{item?.category || 'Adventure'}</Text>
 				</View>
 			</View>
 		</TouchableOpacity>
@@ -80,7 +115,7 @@ const styles = StyleSheet.create({
 	},
 	gradient: {
 		...StyleSheet.absoluteFillObject,
-		top: '40%',
+		top: '30%', // Shifted gradient up slightly for better text readability
 	},
 	content: {
 		position: 'absolute',
@@ -99,11 +134,13 @@ const styles = StyleSheet.create({
 	},
 	tagText: {
 		...TYPOGRAPHY.labelCaps,
-		color: COLORS.onSurface,
+		color: COLORS.background,
+		fontWeight: 'bold',
 	},
 	title: {
 		color: COLORS.onPrimary,
 		marginBottom: SPACING.sm,
+		fontWeight: 'bold',
 	},
 	meta: {
 		flexDirection: 'row',

@@ -1,21 +1,108 @@
 // src/screens/HomeScreen.js
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
 	View,
 	Text,
 	ScrollView,
 	StyleSheet,
 	TouchableOpacity,
+	ActivityIndicator, // Added for loading state
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../constants/theme';
-import { STORIES, CATEGORIES } from '../constants/mockData';
+import { CATEGORIES } from '../constants/mockData'; // Removed STORIES mock data
 import { StoryCard } from '../components/cards/StoryCard';
 
+// Backend & Auth Imports
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../config/firebase';
+import apiClient from '../api/client';
+
 export default function HomeScreen({ navigation }) {
-	const heroStory = STORIES[0];
-	const trendingStories = STORIES.slice(1);
+	// 1. Setup State for real data
+	const [stories, setStories] = useState([]);
+	const [loading, setLoading] = useState(true);
+
+	// 2. Fetch Data on Screen Load
+	useEffect(() => {
+		const fetchRealData = async () => {
+			try {
+				await signInWithEmailAndPassword(
+					auth,
+					'test@dreamtales.com',
+					'password123',
+				);
+				console.log('1. Firebase login successful!');
+
+				const response = await apiClient.get('/stories');
+				console.log('2. Backend Data:', response.data);
+
+				const rawDbStories = response.data.body;
+
+				// 🔥 THE MAGIC TRICK:
+				// We merge your real database text with placeholder visual data
+				// so your StoryCard component doesn't break and stays beautiful!
+				const beautifulStories = rawDbStories.map((story, index) => ({
+					...story, // Keeps your real DB ID, Title, and HLS URL
+
+					// Add fallback visual properties your DB doesn't have yet:
+					// Use a fallback network image so it renders perfectly
+					image: {
+						uri: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=800',
+					},
+					author: 'DreamTales Studio',
+					// Convert seconds to minutes for the UI
+					readTime: `${Math.floor(story.duration / 60)} min`,
+				}));
+
+				setStories(beautifulStories);
+			} catch (error) {
+				console.error('Error fetching data:', error);
+			} finally {
+				setLoading(false);
+			}
+		};
+
+		fetchRealData();
+	}, []);
+
+	// 3. Show Loading Spinner while waiting for backend
+	if (loading) {
+		return (
+			<SafeAreaView
+				style={[
+					styles.container,
+					{ justifyContent: 'center', alignItems: 'center' },
+				]}>
+				<ActivityIndicator
+					size='large'
+					color={COLORS.primary}
+				/>
+				<Text style={{ marginTop: SPACING.md, color: COLORS.onSurfaceVariant }}>
+					Loading your magical stories...
+				</Text>
+			</SafeAreaView>
+		);
+	}
+
+	// 4. Safely handle if the database is empty
+	if (!stories || stories.length === 0) {
+		return (
+			<SafeAreaView
+				style={[
+					styles.container,
+					{ justifyContent: 'center', alignItems: 'center' },
+				]}>
+				<Text style={styles.greeting}>No stories found!</Text>
+				<Text style={styles.subGreeting}>Add some to your database.</Text>
+			</SafeAreaView>
+		);
+	}
+
+	// 5. Assign real data to your UI variables
+	const heroStory = stories[0];
+	const trendingStories = stories.slice(1);
 
 	return (
 		<SafeAreaView
@@ -50,7 +137,7 @@ export default function HomeScreen({ navigation }) {
 					/>
 				</View>
 
-				{/* Categories */}
+				{/* Categories (Still using mock data for now, which is fine) */}
 				<View style={styles.section}>
 					<Text style={styles.sectionTitle}>Explore Stories</Text>
 					<ScrollView
@@ -96,24 +183,26 @@ export default function HomeScreen({ navigation }) {
 				</View>
 
 				{/* Trending Now */}
-				<View style={[styles.section, { marginBottom: 100 }]}>
-					<View style={styles.sectionHeader}>
-						<Text style={styles.sectionTitle}>Trending Now</Text>
-						<Text style={styles.seeAll}>See All</Text>
+				{trendingStories.length > 0 && (
+					<View style={[styles.section, { marginBottom: 100 }]}>
+						<View style={styles.sectionHeader}>
+							<Text style={styles.sectionTitle}>Trending Now</Text>
+							<Text style={styles.seeAll}>See All</Text>
+						</View>
+						<ScrollView
+							horizontal
+							showsHorizontalScrollIndicator={false}
+							contentContainerStyle={styles.categoryScroll}>
+							{trendingStories.map((story) => (
+								<StoryCard
+									key={story.id}
+									item={story}
+									onPress={() => navigation.navigate('Story', { story })}
+								/>
+							))}
+						</ScrollView>
 					</View>
-					<ScrollView
-						horizontal
-						showsHorizontalScrollIndicator={false}
-						contentContainerStyle={styles.categoryScroll}>
-						{trendingStories.map((story) => (
-							<StoryCard
-								key={story.id}
-								item={story}
-								onPress={() => navigation.navigate('Story', { story })}
-							/>
-						))}
-					</ScrollView>
-				</View>
+				)}
 			</ScrollView>
 
 			{/* FAB */}
@@ -130,6 +219,7 @@ export default function HomeScreen({ navigation }) {
 	);
 }
 
+// ... Keep your exact styles down here ...
 const styles = StyleSheet.create({
 	container: { flex: 1, backgroundColor: COLORS.background },
 	scrollContent: { padding: SPACING.lg },
