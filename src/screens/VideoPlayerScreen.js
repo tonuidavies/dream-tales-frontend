@@ -1,23 +1,73 @@
-// src/screens/VideoPlayerScreen.js
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { BlurView } from 'expo-blur';
+import React, { useRef, useState } from 'react';
+import {
+	View,
+	Text,
+	StyleSheet,
+	TouchableOpacity,
+	Dimensions,
+} from 'react-native';
+import { Video, ResizeMode } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS } from '../constants/theme';
 
 export default function VideoPlayerScreen({ route, navigation }) {
 	const { story } = route.params;
+	const videoRef = useRef(null);
+	const [status, setStatus] = useState({});
+
+	// Formatting milliseconds into MM:SS for your UI
+	const formatTime = (millis) => {
+		if (!millis) return '00:00';
+		const totalSeconds = Math.floor(millis / 1000);
+		const minutes = Math.floor(totalSeconds / 60);
+		const seconds = totalSeconds % 60;
+		return `${minutes < 10 ? '0' : ''}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+	};
+
+	// Video Controls
+	const handlePlayPause = () => {
+		if (status.isPlaying) {
+			videoRef.current.pauseAsync();
+		} else {
+			videoRef.current.playAsync();
+		}
+	};
+
+	const handleSeek = (direction) => {
+		if (status.positionMillis !== undefined) {
+			// Seek forward or backward by 10 seconds
+			const seekAmount = 10000;
+			const newPosition =
+				direction === 'forward'
+					? status.positionMillis + seekAmount
+					: Math.max(0, status.positionMillis - seekAmount);
+			videoRef.current.setPositionAsync(newPosition);
+		}
+	};
+
+	// Calculate progress bar percentage
+	const progressPercent = status.durationMillis
+		? (status.positionMillis / status.durationMillis) * 100
+		: 0;
 
 	return (
 		<View style={styles.container}>
-			{/* Fake Video Player Background */}
-			<Image
-				source={{ uri: story.image }}
+			{/* REAL VIDEO PLAYER (Local Machine File) */}
+			<Video
+				ref={videoRef}
 				style={styles.videoBackground}
-				blurRadius={2}
+				// 👇 THIS LOADS THE VIDEO FROM YOUR LOCAL COMPUTER 👇
+				source={require('../../assets/david_story.mp4')}
+				useNativeControls={false}
+				resizeMode={ResizeMode.COVER}
+				onPlaybackStatusUpdate={(status) => setStatus(() => status)}
+				shouldPlay // Auto-play when screen opens
 			/>
+
+			{/* Dark gradient overlay so controlrs are visible */}
 			<View style={styles.overlay} />
 
+			{/* Top Header */}
 			<View style={styles.header}>
 				<TouchableOpacity
 					style={styles.iconButton}
@@ -29,8 +79,10 @@ export default function VideoPlayerScreen({ route, navigation }) {
 					/>
 				</TouchableOpacity>
 				<View style={{ flex: 1, marginLeft: SPACING.md }}>
-					<Text style={styles.title}>{story.title}</Text>
-					<Text style={styles.subtitle}>STORYTIME • CHAPTER 2</Text>
+					<Text style={styles.title}>
+						{story?.title || 'The Brave Shepherd'}
+					</Text>
+					<Text style={styles.subtitle}>STORYTIME • BIBLE STORIES</Text>
 				</View>
 				<TouchableOpacity style={styles.subtitleBtn}>
 					<Ionicons
@@ -43,22 +95,32 @@ export default function VideoPlayerScreen({ route, navigation }) {
 				</TouchableOpacity>
 			</View>
 
+			{/* Center Play/Pause & Seek Controls */}
 			<View style={styles.centerControls}>
-				<TouchableOpacity style={styles.seekBtn}>
+				<TouchableOpacity
+					style={styles.seekBtn}
+					onPress={() => handleSeek('backward')}>
 					<Ionicons
 						name='play-back'
 						size={32}
 						color={COLORS.onPrimary}
 					/>
 				</TouchableOpacity>
-				<TouchableOpacity style={styles.playPauseBtn}>
+
+				<TouchableOpacity
+					style={styles.playPauseBtn}
+					onPress={handlePlayPause}>
 					<Ionicons
-						name='pause'
+						name={status.isPlaying ? 'pause' : 'play'}
 						size={48}
 						color={COLORS.onPrimary}
+						style={!status.isPlaying ? { marginLeft: 6 } : {}} // visually center the play icon
 					/>
 				</TouchableOpacity>
-				<TouchableOpacity style={styles.seekBtn}>
+
+				<TouchableOpacity
+					style={styles.seekBtn}
+					onPress={() => handleSeek('forward')}>
 					<Ionicons
 						name='play-forward'
 						size={32}
@@ -67,14 +129,24 @@ export default function VideoPlayerScreen({ route, navigation }) {
 				</TouchableOpacity>
 			</View>
 
+			{/* Bottom Progress Bar */}
 			<View style={styles.bottomControls}>
 				<View style={styles.timeRow}>
-					<Text style={styles.timeText}>04:20</Text>
-					<Text style={styles.timeText}>12:45</Text>
+					<Text style={styles.timeText}>
+						{formatTime(status.positionMillis)}
+					</Text>
+					<Text style={styles.timeText}>
+						{formatTime(status.durationMillis)}
+					</Text>
 				</View>
 				<View style={styles.progressTrack}>
-					<View style={[styles.progressFill, { width: '35%' }]} />
-					<View style={styles.progressThumb}>
+					{/* Dynamic Width based on video progress */}
+					<View
+						style={[styles.progressFill, { width: `${progressPercent}%` }]}
+					/>
+
+					{/* Dynamic Thumb Position */}
+					<View style={[styles.progressThumb, { left: `${progressPercent}%` }]}>
 						<Ionicons
 							name='star'
 							size={12}
@@ -93,11 +165,10 @@ const styles = StyleSheet.create({
 		...StyleSheet.absoluteFillObject,
 		width: '100%',
 		height: '100%',
-		opacity: 0.8,
 	},
 	overlay: {
 		...StyleSheet.absoluteFillObject,
-		backgroundColor: 'rgba(0,0,0,0.3)',
+		backgroundColor: 'rgba(0,0,0,0.4)', // Slightly darkened for beautiful contrast
 	},
 	header: {
 		flexDirection: 'row',
@@ -138,7 +209,7 @@ const styles = StyleSheet.create({
 		width: 64,
 		height: 64,
 		borderRadius: RADIUS.pill,
-		backgroundColor: 'rgba(255,255,255,0.1)',
+		backgroundColor: 'rgba(255,255,255,0.2)',
 		alignItems: 'center',
 		justifyContent: 'center',
 	},
@@ -181,8 +252,7 @@ const styles = StyleSheet.create({
 		borderRadius: RADIUS.pill,
 		backgroundColor: COLORS.yellow,
 		position: 'absolute',
-		left: '35%',
-		transform: [{ translateX: -12 }],
+		transform: [{ translateX: -12 }], // Keeps the star centered on the line tip
 		alignItems: 'center',
 		justifyContent: 'center',
 		borderWidth: 3,
